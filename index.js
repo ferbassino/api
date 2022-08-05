@@ -1,13 +1,15 @@
 const { response } = require("express");
+const cors = require("cors");
 const express = require("express");
 const app = express();
 
+app.use(cors());
 app.use(express.json());
 
 let notes = [
   {
     id: 1,
-    content: "HTML is easy",
+    content: "Aprendiendo Biomecánica con baskin",
     date: "2019-05-30T17:30:31.098Z",
     important: true,
   },
@@ -72,7 +74,7 @@ app.use((req, res) => {
   res.status(404).json({ error: "not found" });
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
   console.log(`escuchando en el puerto ${PORT}`);
