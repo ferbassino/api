@@ -1,80 +1,115 @@
-const { response } = require("express");
-const cors = require("cors");
+//requerimos dotenv ni bien arranca
+require("dotenv").config();
+
+// hacemos un require de el fichero de mongo que ejecuta lo que hay en mongo.js
+require("./mongo");
+
 const express = require("express");
+const cors = require("cors");
 const app = express();
+// requerimos Note que tiene el esquema y el modelo
+const Note = require("./models/Note");
+const { response } = require("express");
+const notFound = require("./middleware/notFound");
+const handleErrors = require("./middleware/handleErrors");
 
 app.use(cors());
+
 app.use(express.json());
-
-let notes = [
-  {
-    id: 1,
-    content: "Aprendiendo Biomecánica con baskin",
-    date: "2019-05-30T17:30:31.098Z",
-    important: true,
-  },
-  {
-    id: 2,
-    content: "Browser can execute only Javascript",
-    date: "2019-05-30T18:39:34.091Z",
-    important: false,
-  },
-  {
-    id: 3,
-    content: "GET and POST are the most important methods of HTTP protocol",
-    date: "2019-05-30T19:20:14.298Z",
-    important: true,
-  },
-];
-
-app.get("/", (req, res) => {
-  res.send("a ver que pasa");
+let notes = [];
+// ---GET---
+app.get("/", (request, response, next) => {
+  response.send("<h1>baskin</>").catch((error) => next(error));
 });
 
-app.get("/api/notes", (req, res) => {
-  res.json(notes);
+// buscamos las notas que tienen el modelo Note, ademas vamos a mapear para que nos entregue solo lo que queremos, porque hay un _id y un __v en el objeto que no quremos. lo vamos a hacer en el esquema que esta en Notes. no lo podemos mapear acá porque el objeto de respuesta es muy complejo
+
+app.get("/api/notes", (request, response, next) => {
+  Note.find({})
+    .then((notes) => {
+      response.json(notes);
+    })
+    .catch(next);
 });
 
-app.get("/api/notes/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const note = notes.find((note) => note.id === id);
-  if (note) {
-    res.json(note);
-  } else {
-    response.status(404).end();
-  }
+app.get("/api/notes/:id", (request, response, next) => {
+  const { id } = request.params;
+  // le decimos que el id sea precisamente el id que le estmos pasando con el findById
+
+  Note.findById(id)
+    .then((note) => {
+      if (note) {
+        return response.json(note);
+      } else {
+        return response.status(404).end();
+      }
+    })
+    // capturamos el error pero en el catch usamos un next para que pase al siguiente middleware
+    .catch((err) => {
+      next(err);
+    });
 });
-app.delete("/api/notes/:id", (req, res) => {
-  const id = Number(req.params.id);
-  notes = notes.filter((note) => note.id !== id);
-  res.status(204).end();
+
+// ---DELETE---
+app.delete("/api/notes/:id", (request, response, next) => {
+  const { id } = request.params;
+  Note.findByIdAndDelete(id)
+    .then(() => {
+      response.status(404).end();
+    })
+    .catch(next);
 });
 
-app.post("/api/notes", (req, res) => {
-  const note = req.body;
+// ---PUT---
+// en el put, tambien debemos pasarle la nota que queremos actualizar, primero lo requerimos en el cuerpo de la request y luego creamos un objeto con los valores para actualizar
+app.put("/api/notes/:id", (request, response, next) => {
+  const { id } = request.params;
 
-  if (!note.content || !note.content) {
-    return res.status(400).json({ error: "note .content is missing" });
-  }
-
-  const ids = notes.map((note) => note.id);
-  const idMax = Math.max(...ids);
-  const obj = {
+  const note = request.body;
+  const newNoteInfo = {
     content: note.content,
-    id: idMax + 1,
-    date: new Date().toISOString(),
-    important: typeof note.important !== "undefined" ? note.important : false,
+    important: note.important,
   };
-  notes = [...notes, obj];
-  res.status(201).json(obj);
+  // acá pasamos la nota para actualizar junto con el id pero debemos pasarle un tercer parametro para que responda con el nuevo resultado (new:true)
+  Note.findByIdAndUpdate(id, newNoteInfo, { new: true })
+    .then((result) => {
+      response.json(result);
+    })
+    .catch(next);
 });
 
-app.use((req, res) => {
-  console.log(req.path);
-  res.status(404).json({ error: "not found" });
+// ---POST---
+app.post("/api/notes", (request, response, next) => {
+  // guardamos en una variable note lo que viene en el body
+  const note = request.body;
+  // validamos si o hay nota  contenido
+  if (!note.content || !note.content) {
+    return response.status(400).json({ error: "note .content is missing" });
+  }
+  // creamos la nota con el constructor Note
+  const newNote = new Note({
+    content: note.content,
+    date: new Date(),
+    important: typeof note.important !== "undefined" ? note.important : false,
+  });
+  // guardamos la informacion con el metodo save y como es asincrono cuando tenemos guardada la nota y respondemos con la nota
+  newNote
+    .save()
+    .then((savedNote) => {
+      response.json(savedNote);
+    })
+    .catch(next);
 });
 
-const PORT = process.env.PORT || 3001;
+// añadimos un middleware que como primer parametro tiene el error, y en la funcion mirar que error tenemos y como el nombre del error es castError (o sea el error donde el id no coincide en este caso) le decimos: si el nombre del error es castError devuelve un 400, sino un 500, en el send imprimimos el error
+
+// --MIDDLEWARES-- vienen de los respoectivos modulos
+// de los errores
+app.use(handleErrors);
+// middleware para cuando no encuentra la ruta
+app.use(notFound);
+
+const PORT = process.env.PORT;
 
 app.listen(PORT, () => {
   console.log(`escuchando en el puerto ${PORT}`);

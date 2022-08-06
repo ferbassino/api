@@ -1,0 +1,7 @@
+PUT  http://localhost:3001/api/notes/62ed78045d7a39c208e7e614
+Content-Type: application/json
+
+{
+  "content": "baskin, el mejor curso de biomecanica de la historia",
+  "important":true 
+}
